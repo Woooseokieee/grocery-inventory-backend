@@ -4,9 +4,9 @@ const cors = require("cors");
 
 const app = express();
 app.use(cors());
-app.use(express.json()); // VERY IMPORTANT
+app.use(express.json()); // required to read JSON
 
-// Database
+// Initialize SQLite database
 const db = new sqlite3.Database("./database.db", (err) => {
   if (err) {
     console.error("Database error:", err);
@@ -15,7 +15,7 @@ const db = new sqlite3.Database("./database.db", (err) => {
   }
 });
 
-// Create table
+// Create products table
 db.run(`
 CREATE TABLE IF NOT EXISTS products (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -31,17 +31,15 @@ app.get("/products", (req, res) => {
   db.all("SELECT * FROM products", [], (err, rows) => {
     if (err) {
       console.error(err);
-      return res.status(500).json(err);
+      return res.status(500).json({ error: "Database error" });
     }
     res.json(rows);
   });
 });
 
-// ADD product (FIXED)
+// POST add product
 app.post("/products", (req, res) => {
   const { name, price, stock, expiry } = req.body;
-
-  console.log("Received:", req.body); // DEBUG LOG
 
   if (!name || name.trim() === "") {
     return res.status(400).json({ error: "Product name is required" });
@@ -59,18 +57,21 @@ app.post("/products", (req, res) => {
   );
 });
 
-// UPDATE stock
+// PUT update stock
 app.put("/products/:id", (req, res) => {
   const { stock } = req.body;
 
-  if (stock === undefined) {
+  if (stock === undefined || stock === "") {
     return res.status(400).json({ error: "Stock is required" });
   }
 
   db.run(
     "UPDATE products SET stock=? WHERE id=?",
     [stock, req.params.id],
-    () => res.json({ message: "Stock updated" })
+    function (err) {
+      if (err) return res.status(500).json({ error: "Database error" });
+      res.json({ message: "Stock updated" });
+    }
   );
 });
 
@@ -79,11 +80,14 @@ app.delete("/products/:id", (req, res) => {
   db.run(
     "DELETE FROM products WHERE id=?",
     [req.params.id],
-    () => res.json({ message: "Product removed" })
+    function (err) {
+      if (err) return res.status(500).json({ error: "Database error" });
+      res.json({ message: "Product removed" });
+    }
   );
 });
 
-// Render port
+// Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log("Server running on port " + PORT);
